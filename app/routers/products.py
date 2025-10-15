@@ -42,8 +42,8 @@ def list_products(
     return {"items": items, "next_cursor": next_cursor}
 
 # --- DETALLE AUTENTICADO ---
-@router.get("/{prod_id}", response_model=ProductOut)
-def get_product(prod_id: str, user=Depends(get_current_user)):
+@router.get("/{prod_id}", response_model=ProductOut, tags=["public"])
+def get_product(prod_id: str):
     p = repo.get_product(prod_id)
     if not p:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
