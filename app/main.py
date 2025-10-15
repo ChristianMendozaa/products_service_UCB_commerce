@@ -10,8 +10,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=['http://localhost:3000', 'https://ucb-e-commerce.vercel.app'],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["*"],
+    allow_headers=["*"],  # o incluye explícito "Authorization"
 )
 
 app.include_router(products_router)  # ✅
