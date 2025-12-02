@@ -55,6 +55,19 @@ def embed_text(text: str) -> List[float]:
         print(f"Error generando embedding: {e}")
         return []
 
+import uuid
+
+# ... imports ...
+
+def get_deterministic_uuid(source_id: str) -> str:
+    """
+    Genera un UUID determinista a partir de un ID de texto (Firestore ID).
+    Usamos UUID v5 con un namespace personalizado.
+    """
+    # Namespace arbitrario para nuestros productos
+    NAMESPACE_PRODUCTS = uuid.uuid5(uuid.NAMESPACE_DNS, "ucb-commerce-products")
+    return str(uuid.uuid5(NAMESPACE_PRODUCTS, source_id))
+
 def sync_product_to_rag(product_data: Dict[str, Any]):
     """
     Sincroniza un producto (creación/edición) con la tabla RAG.
@@ -63,15 +76,18 @@ def sync_product_to_rag(product_data: Dict[str, Any]):
     if not supabase or not openai_client:
         return
 
-    product_id = product_data.get("id")
-    if not product_id:
+    raw_id = product_data.get("id")
+    if not raw_id:
         return
+    
+    # Convertir ID de Firestore a UUID válido para Supabase
+    product_uuid = get_deterministic_uuid(raw_id)
 
     # 1. Borrar registros previos de este source_id
     try:
-        supabase.table("rag_ucbcommerce_chunks").delete().eq("source_id", product_id).execute()
+        supabase.table("rag_ucbcommerce_chunks").delete().eq("source_id", product_uuid).execute()
     except Exception as e:
-        print(f"Error borrando chunks antiguos para {product_id}: {e}")
+        print(f"Error borrando chunks antiguos para {raw_id} ({product_uuid}): {e}")
 
     # 2. Generar texto y embedding
     text = get_product_text_representation(product_data)
@@ -81,10 +97,8 @@ def sync_product_to_rag(product_data: Dict[str, Any]):
         return
 
     # 3. Insertar nuevo chunk
-    # Como es un producto, generalmente cabe en un solo chunk. 
-    # Si la descripción fuera muy larga, habría que chunkear, pero asumimos que cabe en 1 chunk por ahora.
     row = {
-        "source_id": product_id,
+        "source_id": product_uuid,
         "chunk_index": 0,
         "text": text,
         "embedding": embedding
@@ -92,9 +106,9 @@ def sync_product_to_rag(product_data: Dict[str, Any]):
 
     try:
         supabase.table("rag_ucbcommerce_chunks").insert(row).execute()
-        print(f"Producto {product_id} sincronizado con RAG.")
+        print(f"Producto {raw_id} sincronizado con RAG (UUID: {product_uuid}).")
     except Exception as e:
-        print(f"Error insertando chunk para {product_id}: {e}")
+        print(f"Error insertando chunk para {raw_id}: {e}")
 
 def delete_product_from_rag(product_id: str):
     """
@@ -103,8 +117,10 @@ def delete_product_from_rag(product_id: str):
     if not supabase:
         return
 
+    product_uuid = get_deterministic_uuid(product_id)
+
     try:
-        supabase.table("rag_ucbcommerce_chunks").delete().eq("source_id", product_id).execute()
+        supabase.table("rag_ucbcommerce_chunks").delete().eq("source_id", product_uuid).execute()
         print(f"Producto {product_id} eliminado de RAG.")
     except Exception as e:
         print(f"Error eliminando chunks para {product_id}: {e}")
