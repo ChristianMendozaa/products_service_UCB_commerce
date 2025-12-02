@@ -1,112 +1,53 @@
 # Products Service - UCB Commerce
 
-Microservicio responsable de la gestión del catálogo de productos de la plataforma.
+The central source of truth for the UCB Commerce catalog, managing product lifecycle, inventory, and categorization.
 
-## Descripción
+## The Problem
+Managing a diverse catalog across multiple university careers requires a flexible schema. Traditional relational databases often struggle with the varying attributes of different product types (e.g., "Textbooks" vs. "Lab Equipment"). We needed a system that could handle this variability while maintaining strict consistency for inventory.
 
-Este servicio permite la administración completa de los productos (CRUD), incluyendo su categorización, asignación a carreras y control de inventario básico. Sirve como la fuente de verdad para la información de los productos mostrada en el frontend y utilizada por el servicio de órdenes.
-
-## Tecnologías
-
-- **Lenguaje:** Python 3.10+
-- **Framework:** FastAPI
-- **Base de Datos:** Google Firestore (NoSQL)
-
-## Funcionalidades Principales
-
-- **Gestión de Productos:**
-  - Crear, leer, actualizar y eliminar productos.
-  - Soporte para imágenes (URLs o integración con servicio de imágenes).
-- **Filtrado y Búsqueda:**
-  - Listado de productos con filtros por categoría y carrera.
-  - Paginación de resultados.
-- **Control de Acceso:**
-  - Solo administradores (de carrera o plataforma) pueden crear, editar o eliminar productos.
-  - Lectura pública (o restringida a usuarios autenticados) del catálogo.
-
-## Estructura del Proyecto
-
-```
-app/
-├── core/           # Configuración y conexión a BD
-├── deps/           # Dependencias de autenticación
-├── repositories/   # Capa de acceso a datos (Firestore)
-├── routers/        # Endpoints de la API (products)
-├── schemas/        # Modelos de datos (Product, ProductCreate)
-└── services/       # Lógica de negocio
+## Architecture
+```mermaid
+graph LR
+    Frontend -->|REST| API[FastAPI]
+    API -->|CRUD| DB[(Firestore NoSQL)]
+    API -->|Event| RAG[RAG Sync Hook]
+    RAG -->|Update| Supabase[(Supabase Vector)]
 ```
 
-## Instalación y Ejecución
+## Technical Decisions
 
-1.  **Instalar dependencias:**
-    ```bash
-    pip install -r requirements.txt
-# Products Service - UCB Commerce
+### Why Python & FastAPI?
+- **Speed**: FastAPI is one of the fastest Python frameworks, essential for high-traffic catalog browsing.
+- **Type Safety**: Pydantic models ensure that even with a NoSQL database, our application logic relies on strictly typed data structures, preventing runtime errors.
 
-Microservicio responsable de la gestión del catálogo de productos de la plataforma.
+### Why Google Firestore (NoSQL)?
+We chose **Firestore** over a SQL database for the catalog because of its **flexible schema**. Products in an e-commerce setting often have different attributes. Firestore allows us to store these heterogeneous documents efficiently without complex join tables. Additionally, its real-time capabilities allow for future features like live stock updates.
 
-## Descripción
+### RAG Synchronization
+To support the Chatbot Service, this service implements an **Event-Driven** pattern. Whenever a product is created or updated, a hook triggers a synchronization process that updates the vector embeddings in Supabase. This ensures the AI assistant always has the latest product data without needing a full re-index.
 
-Este servicio permite la administración completa de los productos (CRUD), incluyendo su categorización, asignación a carreras y control de inventario básico. Sirve como la fuente de verdad para la información de los productos mostrada en el frontend y utilizada por el servicio de órdenes.
+## Features
+- **CRUD Operations**: Complete management of products.
+- **Category & Career Filtering**: Hierarchical organization.
+- **Inventory Management**: Basic stock tracking.
+- **RAG Sync**: Automatic vector embedding updates.
 
-## Tecnologías
+## Tech Stack
+- **Language**: Python 3.10+
+- **Framework**: FastAPI
+- **Database**: Google Firestore
 
-- **Lenguaje:** Python 3.10+
-- **Framework:** FastAPI
-- **Base de Datos:** Google Firestore (NoSQL)
+## Setup & Run
 
-## Funcionalidades Principales
-
-- **Gestión de Productos:**
-  - Crear, leer, actualizar y eliminar productos.
-  - Soporte para imágenes (URLs o integración con servicio de imágenes).
-- **Filtrado y Búsqueda:**
-  - Listado de productos con filtros por categoría y carrera.
-  - Paginación de resultados.
-- **Control de Acceso:**
-  - Solo administradores (de carrera o plataforma) pueden crear, editar o eliminar productos.
-  - Lectura pública (o restringida a usuarios autenticados) del catálogo.
-
-## Estructura del Proyecto
-
-```
-app/
-├── core/           # Configuración y conexión a BD
-├── deps/           # Dependencias de autenticación
-├── repositories/   # Capa de acceso a datos (Firestore)
-├── routers/        # Endpoints de la API (products)
-├── schemas/        # Modelos de datos (Product, ProductCreate)
-└── services/       # Lógica de negocio
-```
-
-## Instalación y Ejecución
-
-1.  **Instalar dependencias:**
+1.  **Install dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
 
-2.  **Configurar variables de entorno:**
-    Configurar `.env` con credenciales de Firebase.
+2.  **Configure Environment Variables:**
+    Set up `.env` with Firebase credentials and Supabase keys (for RAG sync).
 
-3.  **Ejecutar el servidor:**
+3.  **Run Server:**
     ```bash
     uvicorn app.main:app --reload --port 8003
     ```
-
-## Integración RAG (Chatbot)
-
-Este servicio sincroniza automáticamente los cambios en los productos con una base de datos vectorial en Supabase para alimentar el sistema RAG del chatbot.
-
-### Configuración RAG
-
-Variables de entorno requeridas en `.env`:
-- `OPENAI_API_KEY`: Para generar embeddings.
-- `SUPABASE_URL`: URL del proyecto Supabase.
-- `SUPABASE_SERVICE_ROLE_KEY`: Key con permisos de escritura (Service Role) para actualizar la tabla `rag_ucbcommerce_chunks`.
-
-### Sincronización
-
-- **Automática**: Al crear, actualizar o eliminar un producto, se actualiza su "ficha" en Supabase.
-- **Manual (Force Sync)**: Endpoint administrativo para regenerar embeddings de TODOS los productos.
-  - `POST /api/products/force-rag-sync`
