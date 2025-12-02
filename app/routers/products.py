@@ -7,6 +7,50 @@ from app.deps.permissions import can_manage_career_or_403, visible_careers_for
 from app.schemas.products import ProductCreate, ProductUpdate, ProductOut, ProductList
 from app.repositories import products_repo as repo
 from app.services.images import upload_image_and_get_url  # ✅ nuevo
+from app.core.rag_sync import sync_product_to_rag, delete_product_from_rag
+# Nota: Implementaremos la lógica de iteración aquí o en rag_sync, pero como rag_sync no ve el repo, 
+# lo haremos en el endpoint usando el repo.
+
+router = APIRouter(prefix="/api/products", tags=["products"])
+
+# --- RUTA PÚBLICA (debe ir antes del detalle) ---
+@router.get("/public", response_model=ProductList, tags=["public"])
+def list_public_products(
+    q: Optional[str] = Query(None, description="Búsqueda simple en nombre/descripcion"),
+    category: Optional[str] = Query(None),
+    career: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    cursor: Optional[str] = Query(None, description="ISO datetime para paginación"),
+):
+    items, next_cursor = repo.list_products(
+        q=q, category=category, career=career, limit=limit, cursor_iso=cursor, restrict_to_careers=None
+    )
+    return {"items": items, "next_cursor": next_cursor}
+
+# --- LISTA AUTENTICADA ---
+@router.get("", response_model=ProductList)
+def list_products(
+    q: Optional[str] = Query(None, description="Búsqueda simple en nombre/descripcion"),
+    category: Optional[str] = Query(None),
+    career: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    cursor: Optional[str] = Query(None, description="ISO datetime para paginación"),
+    user=Depends(get_current_user),
+):
+    restrict_to = visible_careers_for(user["uid"])
+    items, next_cursor = repo.list_products(
+        q=q, category=category, career=career, limit=limit, cursor_iso=cursor,
+        restrict_to_careers=restrict_to if career is None else None,
+    )
+    return {"items": items, "next_cursor": next_cursor}
+
+# --- DETALLE AUTENTICADO ---
+@router.get("/{prod_id}", response_model=ProductOut, tags=["public"])
+def get_product(prod_id: str):
+    p = repo.get_product(prod_id)
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
+# lo haremos en el endpoint usando el repo.
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -54,6 +98,8 @@ def get_product(prod_id: str):
 def create_product(payload: ProductCreate, user=Depends(get_current_user)):
     can_manage_career_or_403(user["uid"], payload.career)
     created = repo.create_product(payload.dict(), uid=user["uid"])
+    # RAG Sync
+    sync_product_to_rag(created)
     return created
 
 # --- CREAR con FORM-DATA + archivo (NUEVO) ---
@@ -88,6 +134,8 @@ async def create_product_form(
         "image": final_image,
     }
     created = repo.create_product(payload, uid=user["uid"])
+    # RAG Sync
+    sync_product_to_rag(created)
     return created
 
 # --- ACTUALIZAR JSON (ya lo tenías) ---
@@ -100,6 +148,8 @@ def update_product(prod_id: str, payload: ProductUpdate, user=Depends(get_curren
     can_manage_career_or_403(user["uid"], target_career)
     updated = repo.update_product(prod_id, payload.dict(exclude_unset=True))
     assert updated is not None
+    # RAG Sync
+    sync_product_to_rag(updated)
     return updated
 
 # --- ACTUALIZAR con FORM-DATA + archivo (NUEVO) ---
@@ -141,6 +191,8 @@ async def update_product_form(
 
     updated = repo.update_product(prod_id, update_payload)
     assert updated is not None
+    # RAG Sync
+    sync_product_to_rag(updated)
     return updated
 
 # DELETE /api/products/{id}
@@ -153,4 +205,19 @@ def delete_product(prod_id: str, user=Depends(get_current_user)):
     ok = repo.delete_product(prod_id)
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
+    # RAG Sync
+    delete_product_from_rag(prod_id)
     return
+
+# --- FORCE SYNC (ADMIN TOOL) ---
+@router.post("/force-rag-sync", tags=["admin"])
+def force_rag_sync():
+    """
+    Recorre TODOS los productos y regenera sus embeddings en Supabase.
+    Puede tardar si hay muchos productos.
+    """
+    count = 0
+    for product in repo.iter_all_products():
+        sync_product_to_rag(product)
+        count += 1
+    return {"status": "ok", "synced_count": count}

@@ -8,3 +8,5 @@ httpx
 pydantic[email]
 requests
 python-multipart
+openai
+supabase

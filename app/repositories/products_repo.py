@@ -101,3 +101,9 @@ def list_products(
 
     next_cursor = results[-1]["createdAt"].isoformat() if results else None
     return results, next_cursor
+
+def iter_all_products():
+    """Generador que devuelve todos los productos de la colección."""
+    docs = firestore_db.collection(_COLLECTION).stream()
+    for d in docs:
+        yield _doc_to_out(d)
