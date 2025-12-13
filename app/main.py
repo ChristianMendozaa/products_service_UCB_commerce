@@ -14,7 +14,9 @@ app.add_middleware(
     allow_headers=["*"],  # o incluye explícito "Authorization"
 )
 
-app.include_router(products_router)  # ✅
+app.include_router(products_router)
+from app.routers.cart import router as cart_router
+app.include_router(cart_router)
 
 @app.get("/health")
 def health():

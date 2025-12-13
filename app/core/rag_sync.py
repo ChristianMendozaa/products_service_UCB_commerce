@@ -33,6 +33,7 @@ def get_product_text_representation(product: Dict[str, Any]) -> str:
     
     # Formato legible para el LLM
     text = (
+        f"ID: {product.get('id', 'N/A')}\n"
         f"Producto: {name}\n"
         f"Categoría: {category}\n"
         f"Carrera: {career}\n"
