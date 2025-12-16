@@ -57,7 +57,6 @@ def _verify_id_token_with_skew(token: str):
 async def get_current_user(request: Request, authorization: Optional[str] = Header(None)):
     # 1) Intentar cookie de sesión
     session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
-    print(SESSION_COOKIE_NAME, session_cookie)
     decoded = None
     if session_cookie:
         try:

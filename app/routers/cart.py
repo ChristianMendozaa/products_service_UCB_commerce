@@ -2,14 +2,25 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 
 from app.deps.auth import get_current_user
-from app.schemas.cart import CartOut, CartItemIn
+from app.schemas.cart import CartOut, CartItemIn, CartEnrichedOut, CartFrontendOut
 from app.repositories import cart_repo
 
-router = APIRouter(prefix="/api/cart", tags=["cart"])
+router = APIRouter(
+    prefix="/api/cart",
+    tags=["Cart"]
+)
 
 @router.get("", response_model=CartOut)
 def get_my_cart(user=Depends(get_current_user)):
     return cart_repo.get_cart(user["uid"])
+
+@router.get("/chatbot", response_model=CartEnrichedOut)
+def get_my_cart_chatbot(user=Depends(get_current_user)):
+    return cart_repo.get_cart_enriched(user["uid"])
+
+@router.get("/details", response_model=CartFrontendOut)
+def get_my_cart_details_frontend(user=Depends(get_current_user)):
+    return cart_repo.get_cart_frontend(user["uid"])
 
 @router.post("/items", response_model=CartOut)
 def add_item_to_cart(item: CartItemIn, user=Depends(get_current_user)):

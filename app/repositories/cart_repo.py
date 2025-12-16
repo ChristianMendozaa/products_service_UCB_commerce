@@ -7,6 +7,8 @@ _COLLECTION = "carts"
 def _now() -> datetime:
     return datetime.utcnow()
 
+from app.repositories import products_repo
+
 def get_cart(uid: str) -> Dict[str, Any]:
     doc = firestore_db.collection(_COLLECTION).document(uid).get()
     if not doc.exists:
@@ -14,8 +16,75 @@ def get_cart(uid: str) -> Dict[str, Any]:
     
     data = doc.to_dict()
     items_map = data.get("items", {})
-    # Convert {pid: qty} to list
+    # Convert {pid: qty} to list (Simple version for Frontend)
     items_list = [{"productId": k, "quantity": v} for k, v in items_map.items()]
+    
+    return {
+        "userId": uid,
+        "items": items_list,
+        "updatedAt": data.get("updatedAt")
+    }
+
+def get_cart_enriched(uid: str) -> Dict[str, Any]:
+    """Cart with product details for Chatbot (No images)"""
+    doc = firestore_db.collection(_COLLECTION).document(uid).get()
+    if not doc.exists:
+        return {"userId": uid, "items": []}
+    
+    data = doc.to_dict()
+    items_map = data.get("items", {})
+    
+    items_list = []
+    for pid, qty in items_map.items():
+        item_data = {"productId": pid, "quantity": qty}
+        # Enrich with product details
+        product = products_repo.get_product(pid)
+        
+        if product:
+            item_data["name"] = product.get("name", f"Unknown Name ({pid})")
+            item_data["price"] = product.get("price", 0)
+            item_data["description"] = product.get("description", "")
+            # item_data["image"] = product.get("image", "") # Omit image for chatbot
+        else:
+             item_data["name"] = f"Unknown Product ({pid}) "
+             item_data["price"] = 0
+             
+        items_list.append(item_data)
+    
+    return {
+        "userId": uid,
+        "items": items_list,
+        "updatedAt": data.get("updatedAt")
+    }
+
+def get_cart_frontend(uid: str) -> Dict[str, Any]:
+    """Cart with FULL product details for Frontend (Images, Stock, etc.)"""
+    doc = firestore_db.collection(_COLLECTION).document(uid).get()
+    if not doc.exists:
+        return {"userId": uid, "items": []}
+    
+    data = doc.to_dict()
+    items_map = data.get("items", {})
+    
+    items_list = []
+    for pid, qty in items_map.items():
+        item_data = {"productId": pid, "quantity": qty}
+        # Enrich with full product details
+        product = products_repo.get_product(pid)
+        
+        if product:
+            item_data["name"] = product.get("name", "Unknown Product")
+            item_data["price"] = product.get("price", 0)
+            item_data["description"] = product.get("description", "")
+            item_data["image"] = product.get("image", "")
+            item_data["category"] = product.get("category", "")
+            item_data["career"] = product.get("career", "")
+            item_data["stock"] = product.get("stock", 0)
+        else:
+             item_data["name"] = "Unknown Product"
+             item_data["price"] = 0
+             
+        items_list.append(item_data)
     
     return {
         "userId": uid,
